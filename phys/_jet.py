@@ -30,9 +30,9 @@ from realGasEoSFunc_New import find_T_rhoP_Mixture, derivative_T_rhoP_Mixture, d
 
 ########################################################################################################################
 class DevelopingFlow:
-    def __init__(self, fluid, orifice, ambient ,mdot = None,
+    def __init__(self, fluid, orifice, ambient, solver_model, mdot = None,
                  theta0 = 0, x0 = 0., y0 = 0.,
-                 lam  = 1.16, betaA = 0.28, 
+                 lam  = 1.16, betaA = 0.28,
                  nn_conserve_momentum = True, nn_T = 'solve_energy', 
                  T_establish_min = -1, suppressWarnings = False):
         '''
@@ -64,7 +64,7 @@ class DevelopingFlow:
 
         # Develop into established Gaussian profile from plug flow
         #self.initial_node = self.expanded_plug_node.establish(ambient, self.fluid_exp, lam)
-        self.initial_node = self.expanded_plug_node.establish(ambient, self.fluid_exp, lam, betaA)
+        self.initial_node = self.expanded_plug_node.establish(ambient, self.fluid_exp, lam, betaA, solver_model)
         #self.initial_node = self.expanded_plug_node.establish_new(ambient, self.fluid_exp, lam)
         
         
@@ -169,7 +169,7 @@ class PlugNode:
         '''Froude number'''
         return self.v/np.sqrt(const.g*self.d*abs(rho_amb - self.rho)/self.rho) #ESH - 7/23/20 - added abs to work with negatively buoyant jets
     
-    def establish(self, ambient, fluid, lam, betaA):
+    def establish(self, ambient, fluid, lam, betaA, solver_model):
         '''
         returns the gaussian node after flow establishment
         '''
@@ -191,10 +191,15 @@ class PlugNode:
         Y_clE_mole = (Y_clE*ambient.therm.MW)/(fluid.therm.MW + Y_clE*ambient.therm.MW - Y_clE*fluid.therm.MW)
         #rho_clE = PR_Cal_rho_PT_Mixture.find_rho_PT_Mixture(ambient.P, T_clE, Y_clE_mole)
         #print ("rho_clE old one", rho_clE)
-        rho_clE = find_rho_PT_Mixture(ambient.P, T_clE, Y_clE_mole)
-        print ("rho_clE new one", rho_clE)
-        #rho_clE = PengRobinsonH2N2().find_rho_PT_Mixture(ambient.P, T_clE, Y_clE_mole)
-        #rho_clE = (ambient.P*MW_clE/(const.R*T_clE)) #Mixture
+        if solver_model == 'Model2':
+            rho_clE = find_rho_PT_Mixture(ambient.P, T_clE, Y_clE_mole)
+            print ("Model2")
+        elif solver_model == 'HWModel':
+            rho_clE = (ambient.P*MW_clE/(const.R*T_clE))
+            print ("HW Model")
+        else:
+            raise ValueError(f"Unknown solver model: {solver_model}")
+            
         #######################################################################################
         # Note: correlation below is for Fr**2 > 40, which is pretty much always true for these 
         # gases - could add Froude number correlation if desired
@@ -335,9 +340,8 @@ class Jet:
         betaA = 0.28
         self.verbose = verbose
         #=====================================================================#      
-        self.developing_flow = DevelopingFlow(fluid, orifice, ambient, mdot,
+        self.developing_flow = DevelopingFlow(fluid, orifice, ambient, solver_model, mdot, 
                                               theta0 = theta0, x0 = x0, y0 = y0,
-#                                              lam  = lam, betaA = betaA,
                                               lam =1.16 , betaA =  0.28,
                                               nn_conserve_momentum = nn_conserve_momentum, nn_T = nn_T, 
                                               T_establish_min = T_establish_min, suppressWarnings = suppressWarnings
@@ -473,6 +477,7 @@ class Jet:
         dMWdS   = (MW*(MW_air - MW_fluid)/(MW_fluid*(Y-1) - MW_air*Y))*dYdS
         Cp      = Y*(Cp_fluid - Cp_air) + Cp_air # Old One
         dCpdS   = (Cp_fluid - Cp_air)*dYdS
+        
         ###################################################################################################################
         if self.solver_model == 'Model2':
             X_cl = Y_cl*MW_cl/MW_fluid
@@ -487,9 +492,11 @@ class Jet:
                              zero]) 
             drhohdS = (rho*Cp*dTdS + rho*T*dCpdS + Cp*T*drhodS)
             rhoh = rho*Cp*T
-        else: #HW model
+        elif self.solver_model == 'HWModel':
             rhoh    = Pamb/const.R*MW*Cp
             drhohdS = Pamb/const.R*(MW*dCpdS + Cp*dMWdS)
+        else:
+            raise ValueError(f"Unknown solver model: {self.solver_model}")
         #################################################################################################################
         ##
         ######################################################################################################################
@@ -665,6 +672,7 @@ class Jet:
         rho_amb, Tamb, Pamb = self.ambient.rho, self.ambient.T, self.ambient.P
         MW_fluid, MW_air = self.fluid.therm.MW, self.ambient.therm.MW
         solver_model = self.solver_model
+        
         if solver_model=='Model2':
             MW_cl  = MW_air*MW_fluid/(Y_cl*(MW_air-MW_fluid) + MW_fluid)
             rho = rho_amb + (rho_cl - rho_amb)*np.exp(-r**2/self.lam**2/B**2)
@@ -676,11 +684,13 @@ class Jet:
             for i in range(len(X[:,0])):
                for j in range(len(X[0,:])):
                    T[i,j] = find_T_rhoP_Mixture(rho[i,j], Pamb, X[i,j])
-        else:
+        elif solver_model=='HWModel' :
             rho = rho_amb + (rho_cl - rho_amb)*np.exp(-r**2/self.lam**2/B**2)
             Y   = Y_cl*rho_cl*np.exp(-(r**2)/((self.lam*B)**2))/rho
             MW  = MW_air*MW_fluid/(Y*(MW_air-MW_fluid) + MW_fluid)
             T = (Pamb*MW/(const.R*rho))
+        else:
+            raise ValueError(f"Unknown solver model: {solver_model}")
         ##############################################################################
         X = Y*MW/MW_fluid
         v = V_cl*np.exp(-(r**2)/(B**2))

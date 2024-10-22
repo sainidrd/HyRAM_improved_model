@@ -259,8 +259,8 @@ def compute_equivalent_tnt_mass(vapor_mass, percent_yield, fuel):
     log.info("TNT mass calculation complete")
     return result
 
-def analyze_jet_plume(amb_fluid, rel_fluid, orif_diam,
-                      rel_angle=0., dis_coeff=1., solver_model='Model2', nozzle_model='yuce',
+def analyze_jet_plume(amb_fluid, rel_fluid, orif_diam, solver_model,
+                      rel_angle=0., dis_coeff=1., nozzle_model='yuce', 
                       create_plot=True, contour=0.04, contour_min=0., contour_max=0.1,
                       xmin=-2.5, xmax=2.5, ymin=0., ymax=10., plot_title="Mole Fraction of Leak",
                       filename=None, output_dir=None, verbose=False):
