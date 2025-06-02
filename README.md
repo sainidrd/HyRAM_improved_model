@@ -3,7 +3,7 @@ The repository includes an enhanced version of the HyRAM model [1], which provid
 
 ## Citations
 
-If you use or build upon this grid‐generation tool, please cite the following:
+If you use the new model for hydrogen plume predictions, please cite:
 ```python
 @article{saini2025improving,
   title={Improving low-order modelling of cryogenic hydrogen releases},
